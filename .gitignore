@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+dist/
+*.pyc
+coverage/
+backups/
+playwright-report/
+test-results/
+!.env.smtp.example
+
+*.tsbuildinfo

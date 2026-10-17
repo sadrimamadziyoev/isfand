@@ -1,0 +1,88 @@
+name: awareguard
+x-backend: &backend
+  image: awareguard-backend:local
+  build:
+    context: ./backend
+    secrets: [build_ca]
+  env_file:
+    - path: .env.smtp
+      required: false
+  environment:
+    DATABASE_URL: postgresql+psycopg://awareguard:${APP_DB_PASSWORD}@db:5432/awareguard
+    PUBLIC_URL: ${PUBLIC_URL:-https://localhost}
+    COOKIE_SECURE: "true"
+    MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Set MFA_ENCRYPTION_KEY}
+    SMTP_ALLOW_INSECURE: "false"
+  restart: unless-stopped
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: awareguard
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./ops/init-db.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U postgres -d awareguard"]
+      interval: 3s
+      retries: 20
+    restart: unless-stopped
+  migrate:
+    <<: *backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://awareguard:${APP_DB_PASSWORD}@db:5432/awareguard
+      MIGRATION_DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/awareguard
+    command: [alembic, upgrade, head]
+    depends_on:
+      db: {condition: service_healthy}
+    restart: "no"
+  api:
+    <<: *backend
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      retries: 5
+  worker:
+    <<: *backend
+    command: [python, -m, app.worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  retention:
+    <<: *backend
+    command: [sh, -c, "while true; do python -m app.cli purge; sleep 86400; done"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  web:
+    build:
+      context: ./frontend
+      secrets: [build_ca]
+    depends_on:
+      api: {condition: service_healthy}
+    ports: ["127.0.0.1:8080:80"]
+    restart: unless-stopped
+  gateway:
+    image: caddy:2.10-alpine
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      NO_PROXY: web,api,db,localhost,127.0.0.1
+      no_proxy: web,api,db,localhost,127.0.0.1
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+    restart: unless-stopped
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  build_ca:
+    file: ${BUILD_CA_CERT:-/etc/ssl/certs/ca-certificates.crt}

@@ -1,0 +1,1 @@
+-- Docker injects the application password using psql in init-db.sh.

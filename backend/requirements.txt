@@ -1,0 +1,14 @@
+fastapi==0.143.3
+uvicorn[standard]==0.38.0
+SQLAlchemy==2.0.44
+psycopg[binary]==3.2.12
+alembic==1.17.0
+argon2-cffi==25.1.0
+pyotp==2.9.0
+dnspython==2.8.0
+email-validator==2.3.0
+python-multipart==0.0.32
+httpx==0.28.1
+pytest==9.1.1
+cryptography==50.0.2
+starlette==1.8.0
