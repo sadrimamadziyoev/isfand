@@ -1,4 +1,5 @@
 import html
+import logging
 import os
 import smtplib
 import ssl
@@ -9,6 +10,8 @@ from sqlalchemy import select
 
 from .config import settings
 from .models import Domain
+
+log = logging.getLogger(__name__)
 
 
 def require_ready(db, company):
@@ -54,7 +57,8 @@ def deliver(company, to, name, template, link, test=False):
     kwargs = {"host": company.smtp_host, "port": company.smtp_port, "timeout": 15}
     if company.smtp_tls == "ssl":
         kwargs["context"] = ssl.create_default_context()
-    with cls(**kwargs) as smtp:
+    smtp = cls(**kwargs)
+    try:
         if company.smtp_tls == "starttls":
             smtp.starttls(context=ssl.create_default_context())
         if company.smtp_user:
@@ -62,3 +66,18 @@ def deliver(company, to, name, template, link, test=False):
         refused = smtp.send_message(message)
         if refused:
             raise smtplib.SMTPRecipientsRefused(refused)
+    finally:
+        # SMTP acceptance is determined by DATA, not by the later QUIT reply.
+        # Cleanup must neither turn an accepted message into a failure nor mask
+        # the original TLS/authentication/delivery exception.
+        try:
+            code, _ = smtp.quit()
+            if code != 221:
+                log.warning("SMTP relay returned an unexpected QUIT status")
+        except (OSError, smtplib.SMTPException):
+            log.warning("SMTP connection cleanup failed")
+        finally:
+            try:
+                smtp.close()
+            except (OSError, smtplib.SMTPException):
+                log.warning("SMTP connection close failed")

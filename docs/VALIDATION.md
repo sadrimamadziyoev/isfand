@@ -18,3 +18,10 @@ Verified in the cloud workspace with Python 3.12, Node 24, PostgreSQL 16, and sy
 DNS TXT lookup is mocked in automated tests. SMTP protocol delivery is exercised against a local relay; tests do not establish connectivity, deliverability, SPF/DKIM/DMARC configuration, or permissions for any real client's infrastructure. The browser workflow runs against the local development API/Vite server; deployment smoke checks separately verify HTTPS and static/API routing. Production has no seeded administrator or sample companies.
 
 No real email campaign, public deployment, penetration test, OS/container-image vulnerability scan, or environment publication is claimed. Those release checks and client approvals remain prerequisites for a real pilot. See OPERATIONS.md for configuration, retention, logging, and delivery limitations.
+
+## Review fixes — 2026-10-22
+
+- The disposable PostgreSQL test runner passed **22 tests**, including a real local SMTP relay accepting DATA but rejecting QUIT, preservation of delivery failures when cleanup also fails, macOS CA-path fallback, private configuration creation, and preservation of existing environment files.
+- **Three Playwright company-switching regressions passed** with controlled response ordering: late old-company data is ignored, old errors cannot hide the new loading indicator, and old rows clear immediately when switching tenants. These browser tests mock the API to reproduce ordering deterministically.
+- TypeScript and the production frontend build passed. Ruff and `git diff --check` passed. The existing large-JavaScript-bundle and Starlette test-client deprecation warnings remain.
+- A freshly generated configuration with the detected host CA bundle passed Docker Compose validation. macOS path detection was simulated in automated tests; an actual macOS installation was not available in this Linux workspace.

@@ -42,7 +42,9 @@ class SMTPHandler(socketserver.StreamRequestHandler):
                 self.server.messages.append(b"".join(parts))
                 self.wfile.write(b"250 Accepted\r\n")
             elif cmd.startswith("QUIT"):
-                self.wfile.write(b"221 Bye\r\n")
+                self.wfile.write(
+                    f"{getattr(self.server, 'quit_code', 221)} Bye\r\n".encode()
+                )
                 break
             else:
                 self.wfile.write(b"250 OK\r\n")

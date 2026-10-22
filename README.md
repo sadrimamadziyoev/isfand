@@ -4,15 +4,21 @@ A corporate phishing-awareness training platform built from [the supplied specif
 
 ## Start with Docker Compose
 
-Prerequisites: Docker with Compose v2, Python 3.12+ for the initial configuration helper.
+Prerequisites: Git, Docker with Compose 2.24+, and Python 3.12+ for the initial configuration helper. On macOS, start Docker Desktop first.
 
 ```sh
+git clone https://github.com/sadrimamadziyoev/isfand.git
+cd isfand
 python3.12 -m venv .venv
 .venv/bin/pip install --require-hashes -r backend/requirements.lock
 .venv/bin/python ops/configure.py
 docker compose up -d --build
 docker compose exec api python -m app.cli create-admin --email admin@your-company.com
 ```
+
+Run these commands from the project root: it must contain `backend/requirements.lock`, `frontend`, and `compose.yaml`. If you already cloned the repository, use that checkout instead of cloning again. If the lockfile is missing, check `pwd`, `git status`, and your checkout before installing; do not substitute a different requirements file.
+
+The configuration helper detects a host CA bundle on Linux or macOS and saves `BUILD_CA_CERT` in `.env`, so Docker builds retain TLS verification. To use a corporate CA bundle, export `BUILD_CA_CERT=/absolute/path/to/trusted-bundle.pem` before running the helper. It never overwrites an existing `.env`. If you created `.env` with an earlier version on macOS, add `BUILD_CA_CERT=/etc/ssl/cert.pem` to that file (or use your actual trusted bundle path); preserve the existing database passwords and MFA key.
 
 The CLI prompts privately for a password (12+ characters), generates an authenticator enrollment secret, and requires a valid TOTP code before creating the administrator. Enroll using your authenticator's manual-entry option; protect the displayed secret. There is no default account or public registration. Keep `MFA_ENCRYPTION_KEY` outside the database and back it up securely; losing it prevents MFA decryption. Never commit `.env`.
 

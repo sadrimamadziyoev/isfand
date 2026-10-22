@@ -1,4 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import ReactDOM from "react-dom/client";
 import {
   App as AntApp,
@@ -228,6 +234,8 @@ function Main() {
   const [campaignForm] = Form.useForm();
   const [approvalForm] = Form.useForm();
   const [testForm] = Form.useForm();
+  const selectedCompany = useRef("");
+  const loadRequest = useRef(0);
   const company = companies.find((c) => c.id === companyId);
   const error = (e: unknown) => message.error((e as Error).message);
   async function loadCompanies() {
@@ -237,33 +245,42 @@ function Main() {
       items.some((c) => c.id === old) ? old : items[0]?.id || "",
     );
   }
-  async function load(id = companyId) {
-    if (!id) return;
-    setBusy(true);
-    try {
-      const [es, cs, ts, as] = await Promise.all([
-        api<Employee[]>("/employees?company_id=" + id),
-        api<Campaign[]>("/campaigns?company_id=" + id),
-        api<Template[]>("/templates"),
-        api<Audit[]>("/audit?company_id=" + id),
-      ]);
-      const ss = await Promise.all(
-        cs.map((c) => api<Stats>(scoped(c.id, id, "/statistics"))),
-      );
-      setEmployees(es);
-      setCampaigns(cs);
-      setTemplates(ts);
-      setAudits(as);
-      setStats(ss);
-      setDetail((old) =>
-        old ? ss.find((s) => s.campaign.id === old.campaign.id) || null : null,
-      );
-    } catch (e) {
-      error(e);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const load = useCallback(
+    async (id = selectedCompany.current) => {
+      if (!id || id !== selectedCompany.current) return;
+      const request = ++loadRequest.current;
+      const isCurrent = () =>
+        request === loadRequest.current && id === selectedCompany.current;
+      setBusy(true);
+      try {
+        const [es, cs, ts, as] = await Promise.all([
+          api<Employee[]>("/employees?company_id=" + id),
+          api<Campaign[]>("/campaigns?company_id=" + id),
+          api<Template[]>("/templates"),
+          api<Audit[]>("/audit?company_id=" + id),
+        ]);
+        const ss = await Promise.all(
+          cs.map((c) => api<Stats>(scoped(c.id, id, "/statistics"))),
+        );
+        if (!isCurrent()) return;
+        setEmployees(es);
+        setCampaigns(cs);
+        setTemplates(ts);
+        setAudits(as);
+        setStats(ss);
+        setDetail((old) =>
+          old
+            ? ss.find((s) => s.campaign.id === old.campaign.id) || null
+            : null,
+        );
+      } catch (e) {
+        if (isCurrent()) message.error((e as Error).message);
+      } finally {
+        if (isCurrent()) setBusy(false);
+      }
+    },
+    [message],
+  );
   useEffect(() => {
     api<{ email: string; csrf: string }>("/auth/me")
       .then((v) => {
@@ -276,21 +293,27 @@ function Main() {
   useEffect(() => {
     if (email) loadCompanies().catch(error);
   }, [email]);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    selectedCompany.current = companyId;
+    ++loadRequest.current;
     setSearch("");
     setDetail(null);
+    setEmployees([]);
+    setCampaigns([]);
+    setStats([]);
+    setTemplates([]);
+    setAudits([]);
+    setBusy(false);
     if (companyId) load(companyId);
-    else {
-      setEmployees([]);
-      setCampaigns([]);
-      setStats([]);
-    }
-  }, [companyId]);
+    return () => {
+      ++loadRequest.current;
+    };
+  }, [companyId, load]);
   useEffect(() => {
     if (!companyId || !campaigns.some((c) => c.status === "Running")) return;
     const timer = setInterval(() => load(companyId), 5000);
     return () => clearInterval(timer);
-  }, [companyId, campaigns.some((c) => c.status === "Running")]);
+  }, [companyId, campaigns.some((c) => c.status === "Running"), load]);
   async function action(path: string, data?: unknown) {
     setBusy(true);
     try {

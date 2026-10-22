@@ -495,3 +495,16 @@ def test_company_settings_change_requires_new_test(client, smtp, monkeypatch):
     assert client.put("/api/companies/" + c["id"], json=c).status_code == 200
     result = client.get(path(c, ca, "statistics")).json()
     assert result["campaign"]["test_sent_at"] is None
+
+
+def test_accepted_delivery_survives_bad_smtp_quit(client, smtp, monkeypatch):
+    smtp.quit_code = 500
+    company = make_company(client, smtp, monkeypatch)
+    employees = import_staff(client, company, 1)
+    campaign = draft(client, company, employees)
+    approve(client, company, campaign, employees[0]["email"])
+    assert client.post(path(company, campaign, "start")).status_code == 200
+    assert process_one(company["id"])
+    stats = client.get(path(company, campaign, "statistics")).json()
+    assert (stats["sent"], stats["failed"]) == (1, 0)
+    assert len(smtp.messages) == 2
